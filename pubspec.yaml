@@ -1,0 +1,36 @@
+name: slagent
+description: "本地 AI Agent 桌面应用（macOS + Windows）"
+publish_to: 'none' # 私有项目，禁止发布到 pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # GetX 状态管理 / 路由 / 依赖注入
+  get: ^4.7.2
+  # HTTP 请求
+  http: ^1.2.0
+  # 目录选择（getDirectoryPath）
+  file_picker: ^8.1.2
+  # 消息/工作区 id 生成
+  uuid: ^4.5.1
+  # 时间格式化（HH:mm）
+  intl: ^0.20.0
+  # 本地缓存目录
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

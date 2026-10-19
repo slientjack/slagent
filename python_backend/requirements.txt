@@ -1,0 +1,14 @@
+# Python 后端依赖清单
+# 安装：pip install -r requirements.txt
+
+fastapi              # Web 框架（路由、请求校验、HTTPException）
+uvicorn              # ASGI 服务器（程序化启动、随机端口绑定）
+langchain            # Agent 框架（create_agent 预装配运行时）
+langchain-core       # 消息类型（AIMessage/ToolMessage）、@tool 装饰器
+langchain-deepseek   # Deepseek 聊天模型接入（ChatDeepSeek）
+httpx                # HTTP 客户端（web_tool 工具使用；langchain 内部也依赖）
+pydantic             # 数据模型与请求/响应校验
+cryptography         # Fernet 对称加密（API Key 加密存储）
+
+# ---- 以下仅打包发布时需要（本地开发可不装）----
+pyinstaller          # 把后端打包成独立可执行文件（build.spec）
