@@ -25,6 +25,9 @@ dependencies:
   intl: ^0.20.0
   # 本地缓存目录
   path_provider: ^2.1.4
+  gpt_markdown: 1.2.1
+  url_launcher: ^6.3.2
+  highlight: ^0.7.0
 
 dev_dependencies:
   flutter_test:
