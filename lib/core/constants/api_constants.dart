@@ -26,11 +26,20 @@ class ApiConstants {
   /// 发送消息
   static const String chatSend = '/api/chat/send';
 
+  /// 待处理的权限请求（轮询）
+  static const String permissionPending = '/api/permissions/pending';
+
+  /// 提交权限决策
+  static const String permissionRespond = '/api/permissions/respond';
+
   /// 普通请求超时时间
   static const Duration defaultTimeout = Duration(seconds: 15);
 
-  /// 发送消息超时时间（LLM 推理可能较慢）
-  static const Duration chatTimeout = Duration(seconds: 300);
+  /// 发送消息超时时间（LLM 推理 + 等待用户授权，后者最长 300 秒）
+  static const Duration chatTimeout = Duration(seconds: 600);
+
+  /// 权限请求轮询间隔
+  static const Duration permissionPollInterval = Duration(milliseconds: 800);
 
   /// 健康检查次数
   static const int healthCheckRetries = 5;

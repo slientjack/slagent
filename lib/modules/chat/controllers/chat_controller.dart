@@ -7,14 +7,28 @@ import 'package:uuid/uuid.dart';
 import '../../../../data/models/message_model.dart';
 import '../../../../data/models/workspace_model.dart';
 import '../../../../data/repositories/conversation_repository.dart';
+import '../../../../data/services/backend_service.dart';
 import '../../workspace/controllers/workspace_controller.dart';
+import 'permission_controller.dart';
 
-/// 聊天控制器：消息列表、发送（乐观更新）、历史加载、清空
+/// 聊天控制器：消息列表、发送（乐观更新）、停止生成、历史加载、清空
 class ChatController extends GetxController {
-  ChatController({required ConversationRepository repository})
-      : _repository = repository;
+  ChatController({
+    required ConversationRepository repository,
+    required PermissionController permissionController,
+  })  : _repository = repository,
+        _permissionController = permissionController;
 
   final ConversationRepository _repository;
+
+  /// 权限请求轮询（发送期间负责展示授权卡片）
+  final PermissionController _permissionController;
+
+  /// 当前发送请求的取消句柄（思考中时非空）
+  RequestHandle? _activeHandle;
+
+  /// 正在主动停止（取消请求），catch 时据此静默处理
+  bool _stopping = false;
 
   /// 消息列表（时间正序：旧 → 新）
   final RxList<MessageModel> messages = <MessageModel>[].obs;
@@ -85,6 +99,8 @@ class ChatController extends GetxController {
     isLoading.value = true;
     errorMessage.value = null;
     _lastFailedInput.value = null;
+    // 发送期间开始监听权限请求（工具越界时会要求用户授权）
+    _permissionController.startWatching(ws.id);
 
     // 乐观追加用户消息
     messages.add(MessageModel(
@@ -95,9 +111,12 @@ class ChatController extends GetxController {
     ));
 
     try {
+      final handle = RequestHandle();
+      _activeHandle = handle;
       final result = await _repository.sendMessage(
         message: content,
         workspaceId: ws.id,
+        handle: handle,
       );
       messages.add(MessageModel(
         id: _uuid.v4(),
@@ -107,6 +126,8 @@ class ChatController extends GetxController {
         toolCalls: result.toolCalls,
       ));
     } catch (e) {
+      // 主动停止：不插入错误气泡，界面静默恢复
+      if (_stopping) return;
       // 失败：插入系统错误气泡（红色边框样式，带重试），保留原始输入
       _lastFailedInput.value = content;
       messages.add(MessageModel(
@@ -117,8 +138,22 @@ class ChatController extends GetxController {
         isError: true,
       ));
     } finally {
+      _stopping = false;
+      _activeHandle = null;
+      // 回复结束（含失败/超时/停止）后停止权限轮询
+      _permissionController.stopWatching();
       isLoading.value = false;
     }
+  }
+
+  /// 停止本次生成：中止请求 + 关闭授权卡（未作答请求按拒绝回传）+ 恢复输入状态
+  void stop() {
+    if (!isLoading.value) return;
+    _stopping = true;
+    _activeHandle?.cancel();
+    // 关闭授权卡并兜底拒绝未决请求，让后端工具线程尽快解锁
+    _permissionController.stopWatching();
+    isLoading.value = false;
   }
 
   /// 重试上一次失败的发送（移除错误气泡后重新发送）
@@ -137,6 +172,8 @@ class ChatController extends GetxController {
     final ws = Get.find<WorkspaceController>().currentWorkspace.value;
     if (ws == null) return;
     errorMessage.value = null;
+    // 停止权限监听（对应后端也会清空该工作区的会话级授权）
+    _permissionController.stopWatching();
     try {
       await _repository.clearHistory(ws.id);
       messages.clear();

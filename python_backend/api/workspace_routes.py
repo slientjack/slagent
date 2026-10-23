@@ -27,6 +27,7 @@ from schemas.workspace_schema import (
     WorkspaceResponse,
     WorkspacesListResponse,
 )
+from tools.permission import PermissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,15 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_router(config_manager: ConfigManager) -> APIRouter:
+def build_router(
+    config_manager: ConfigManager,
+    permission_manager: PermissionManager | None = None,
+) -> APIRouter:
     """构建工作区路由。
 
     Args:
         config_manager: 配置管理器（定位 workspaces.json 与 conversations 目录）。
+        permission_manager: 权限管理器（删除工作区时清空其会话级授权）。
 
     Returns:
         挂载了 CRUD 端点的 APIRouter。
@@ -141,6 +146,9 @@ def build_router(config_manager: ConfigManager) -> APIRouter:
                 logger.warning("删除对话历史文件失败：%s", exc)
 
         logger.info("工作区已删除：%s（%s）", workspace.get("name"), workspace_id)
+        # 同步清空该工作区的会话级授权
+        if permission_manager is not None:
+            permission_manager.clear_session(workspace_id)
         return StatusResponse()
 
     return router

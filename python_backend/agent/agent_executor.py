@@ -30,6 +30,7 @@ from agent.prompt_templates import SYSTEM_PROMPT_TEMPLATE
 from config import ConfigManager
 from models.model_factory import ModelFactory
 from tools.base_tool import truncate_output
+from tools.permission import PermissionManager
 from tools.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -100,13 +101,20 @@ def trim_history(messages: list[dict[str, Any]], max_context_length: int) -> lis
 class AgentExecutor:
     """Agent 执行器：一次 run() 调用完成一轮对话（可能含多次工具调用）。"""
 
-    def __init__(self, config_manager: ConfigManager) -> None:
-        """注入配置管理器（读取 API Key、安全白名单等）。
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        permission_manager: PermissionManager | None = None,
+    ) -> None:
+        """注入配置管理器与权限管理器。
 
         Args:
-            config_manager: 应用配置管理器实例。
+            config_manager: 应用配置管理器实例（读取 API Key、白名单等）。
+            permission_manager: 权限管理器。注入后文件越界访问与白名单外命令
+                会向前端发起实时授权请求；为 None 时保持严格限制。
         """
         self.config_manager = config_manager
+        self.permission_manager = permission_manager
 
     def run(
         self,
@@ -114,6 +122,7 @@ class AgentExecutor:
         user_message: str,
         workspace_root: Path | str,
         settings: dict[str, Any],
+        workspace_id: str | None = None,
     ) -> tuple[str, list[dict[str, Any]]]:
         """执行一轮 Agent 对话。
 
@@ -124,6 +133,7 @@ class AgentExecutor:
             workspace_root: 当前工作区根目录（工具作用域 + 提示词注入）。
             settings: 已合并请求级覆盖后的生效设置
                 （model / temperature / max_context_length）。
+            workspace_id: 当前工作区 id（权限请求按工作区隔离会话授权）。
 
         Returns:
             二元组 (reply_text, tool_call_records)：
@@ -146,7 +156,12 @@ class AgentExecutor:
             raise RuntimeError("请先在设置中配置 Deepseek API Key")
         llm = provider.get_llm(api_key, settings)
 
-        tools = ToolRegistry.build_all_tools(workspace_root, self.config_manager)
+        tools = ToolRegistry.build_all_tools(
+            workspace_root,
+            self.config_manager,
+            workspace_id=workspace_id,
+            permission_manager=self.permission_manager,
+        )
 
         # ---- 3. 系统提示词：注入当前工作区绝对路径 ----
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(workspace_path=str(workspace_root))

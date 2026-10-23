@@ -1,11 +1,13 @@
 import 'package:get/get.dart';
 
 import '../../data/repositories/conversation_repository.dart';
+import '../../data/repositories/permission_repository.dart';
 import '../../data/repositories/workspace_repository.dart';
 import '../../data/services/backend_service.dart';
 import '../../data/services/process_manager.dart';
 import '../../data/services/storage_service.dart';
 import '../../modules/chat/controllers/chat_controller.dart';
+import '../../modules/chat/controllers/permission_controller.dart';
 import '../../modules/settings/controllers/settings_controller.dart';
 import '../../modules/workspace/controllers/workspace_controller.dart';
 
@@ -28,6 +30,9 @@ class AppBinding extends Bindings {
     Get.put(ConversationRepository(
       backendService: Get.find<BackendService>(),
     ));
+    Get.put(PermissionRepository(
+      backendService: Get.find<BackendService>(),
+    ));
 
     // ---- 控制器 ----
     // 工作区控制器：立即注册以便启动时先行渲染缓存
@@ -38,10 +43,15 @@ class AppBinding extends Bindings {
     Get.put(SettingsController(
       backendService: Get.find<BackendService>(),
     ));
+    // 权限控制器：聊天控制器依赖它，需先注册
+    Get.put(PermissionController(
+      repository: Get.find<PermissionRepository>(),
+    ));
     // 聊天控制器：进入主界面时创建（fenix 保证销毁后可重建）
     Get.lazyPut(
       () => ChatController(
         repository: Get.find<ConversationRepository>(),
+        permissionController: Get.find<PermissionController>(),
       ),
       fenix: true,
     );

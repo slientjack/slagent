@@ -4,7 +4,9 @@
 设计意图：
 - build_file_tools(workspace_root) 为指定工作区构建一套文件工具
   （读 / 建 / 改 / 删 / 重命名 / 列目录），所有路径参数均经过
-  base_tool._safe_path 安全校验，确保 LLM 只能操作工作区内的文件。
+  base_tool._safe_path 安全校验。
+- 默认只允许操作工作区内文件；若注入 workspace_id 与权限管理器，
+  访问工作区外路径会触发前端授权弹窗，用户允许后才放行。
 - 每个工具用 LangChain 的 @tool 装饰器封装，docstring 用中文详细说明
   参数含义与返回值 —— 这些文本会作为工具描述发送给 LLM，
   直接决定 Agent 能否正确调用工具。
@@ -16,21 +18,30 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from langchain_core.tools import tool
 
 from tools.base_tool import _safe_path, truncate_output
 
+if TYPE_CHECKING:
+    from tools.permission import PermissionManager
+
 # 单文件读取上限：100KB（超过则截断并提示，防止超大文件撑爆上下文）
 MAX_FILE_READ_CHARS = 100 * 1024
 
 
-def build_file_tools(workspace_root: Path | str) -> list[Callable]:
+def build_file_tools(
+    workspace_root: Path | str,
+    workspace_id: str | None = None,
+    permission_manager: "PermissionManager | None" = None,
+) -> list[Callable]:
     """为工作区构建一组文件操作 LangChain 工具。
 
     Args:
-        workspace_root: 工作区根目录，所有文件操作都被限制在该目录内。
+        workspace_root: 工作区根目录，默认所有文件操作被限制在该目录内。
+        workspace_id: 工作区 id（权限请求按工作区隔离会话授权）。
+        permission_manager: 权限管理器；注入后允许用户实时授权访问工作区外路径。
 
     Returns:
         LangChain 工具列表（read_file / create_file / edit_file /
@@ -38,19 +49,31 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
     """
     root = Path(workspace_root)
 
+    def resolve(path: str, operation: str) -> Path:
+        """统一调用 _safe_path，把授权参数与操作名一并传入。"""
+        return _safe_path(
+            root,
+            path,
+            workspace_id=workspace_id,
+            permission_manager=permission_manager,
+            operation=operation,
+        )
+
     @tool
     def read_file(path: str) -> str:
-        """读取工作区内指定文本文件的内容。
+        """读取指定文本文件的内容（可读取工作区外文件，需用户授权）。
 
         参数：
-            path: 文件相对路径（相对于工作区根目录），例如 "src/main.py"。
+            path: 文件路径，可以是相对工作区根目录的路径（如 "src/main.py"），
+                  也可以是绝对路径（如 "/Users/me/notes.txt"）。
+                  工作区之外的路径会触发用户授权确认。
 
         返回：
             文件全文内容（超大文件超过 100KB 时截断并附提示）；
             二进制文件（含 \\0 字节）无法读取，会返回错误说明。
         """
         try:
-            target = _safe_path(root, path)
+            target = resolve(path, "读取")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 
@@ -84,17 +107,18 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
 
     @tool
     def create_file(path: str, content: str) -> str:
-        """在工作区内创建新文件并写入内容。若文件已存在则会报错（不会覆盖）。
+        """创建新文件并写入内容（可在工作区外创建，需用户授权）。若文件已存在则会报错（不会覆盖）。
 
         参数：
-            path: 新文件的相对路径，例如 "notes/todo.txt"。父目录不存在时会自动创建。
+            path: 新文件路径（相对工作区根目录或绝对路径），例如 "notes/todo.txt"。
+                  父目录不存在时会自动创建；工作区之外的路径会触发用户授权确认。
             content: 要写入的完整文件内容（UTF-8 文本）。
 
         返回：
             成功时返回确认信息与文件路径；文件已存在时返回错误说明。
         """
         try:
-            target = _safe_path(root, path)
+            target = resolve(path, "创建")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 
@@ -111,10 +135,10 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
 
     @tool
     def edit_file(path: str, old_text: str, new_text: str) -> str:
-        """修改工作区内已有文件：把文件中第一次出现的 old_text 替换为 new_text。
+        """修改已有文件：把文件中第一次出现的 old_text 替换为 new_text（可修改工作区外文件，需用户授权）。
 
         参数：
-            path: 文件相对路径。
+            path: 文件路径（相对工作区根目录或绝对路径）。
             old_text: 要被替换的原文（必须与文件内容完全一致，包括缩进与空行；
                       未在文件中找到时会报错，请先 read_file 确认原文）。
             new_text: 替换后的新文本（替换 old_text 第一次出现的位置）。
@@ -123,7 +147,7 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
             成功时返回确认信息；old_text 未找到或文件不存在时返回错误说明。
         """
         try:
-            target = _safe_path(root, path)
+            target = resolve(path, "修改")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 
@@ -149,16 +173,16 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
 
     @tool
     def delete_file(path: str) -> str:
-        """删除工作区内的文件或空目录。注意：目录非空时删除会失败。
+        """删除文件或空目录（可删除工作区外文件，需用户授权）。注意：目录非空时删除会失败。
 
         参数：
-            path: 要删除的文件相对路径。
+            path: 要删除的文件路径（相对工作区根目录或绝对路径）。
 
         返回：
             成功时返回确认信息；文件不存在或删除失败时返回错误说明。
         """
         try:
-            target = _safe_path(root, path)
+            target = resolve(path, "删除")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 
@@ -181,18 +205,19 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
 
     @tool
     def rename_file(old_path: str, new_path: str) -> str:
-        """重命名（或移动）工作区内的文件/目录。
+        """重命名（或移动）文件/目录（可跨出工作区，需用户授权）。
 
         参数：
-            old_path: 原相对路径。
-            new_path: 新相对路径（父目录不存在时自动创建；目标已存在时会报错）。
+            old_path: 原路径（相对工作区根目录或绝对路径）。
+            new_path: 新路径（父目录不存在时自动创建；目标已存在时会报错）。
+                      跨出工作区时会触发用户授权确认。
 
         返回：
             成功时返回确认信息；原路径不存在或目标已存在时返回错误说明。
         """
         try:
-            src = _safe_path(root, old_path)
-            dst = _safe_path(root, new_path)
+            src = resolve(old_path, "重命名")
+            dst = resolve(new_path, "重命名")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 
@@ -213,16 +238,16 @@ def build_file_tools(workspace_root: Path | str) -> list[Callable]:
 
     @tool
     def list_files(path: str = ".") -> str:
-        """列出工作区内指定目录下一层的文件与子目录（不递归进入子目录）。
+        """列出指定目录下一层的文件与子目录（不递归进入子目录；可列工作区外目录，需用户授权）。
 
         参数：
-            path: 目录相对路径，默认 "." 表示工作区根目录。
+            path: 目录路径（相对工作区根目录或绝对路径），默认 "." 表示工作区根目录。
 
         返回：
             每行一项，格式为 "[目录] 名称/" 或 "[文件] 名称"；目录不存在时返回错误。
         """
         try:
-            target = _safe_path(root, path)
+            target = resolve(path, "列出")
         except PermissionError as exc:
             return f"❌ 错误：{exc}"
 

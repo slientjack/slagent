@@ -15,7 +15,7 @@
 | 工作区管理 | 绑定本地目录作为 Agent 操作范围；创建 / 切换 / 删除（右键菜单，二次确认） |
 | 对话 | 按工作区独立持久化历史；气泡样式区分用户/AI；AI 回复 Markdown 渲染（代码块高亮+复制、链接点击、表格）；工具调用记录可折叠查看；加载与错误态 |
 | Agent 工具 | 文件读写/编辑/删除/重命名/移动/列目录、白名单终端命令、HTTP 请求 |
-| 安全 | 文件操作路径围栏（越界拒绝）、终端命令白名单+危险模式黑名单、API Key 加密存储 |
+| 安全 | 默认文件操作限定工作区、终端命令白名单；越界操作弹窗授权（单次 / 本轮 / 自动 / 拒绝）；API Key 加密存储 |
 | 设置 | Deepseek API Key（密码框）、模型选择（预留扩展）、温度滑块、上下文长度 |
 
 架构上预留了多模型扩展点（`python_backend/models/` 的 Provider 注册表），
@@ -90,6 +90,7 @@ flutter analyze           # 静态检查
 | 对话历史 | `{数据目录}/conversations/{workspace_id}.json` |
 | 设置（含加密 API Key） | `{数据目录}/settings.json` |
 | 终端命令白名单（可选覆盖） | `{数据目录}/safe_commands.json` |
+| 自动允许规则 | `{数据目录}/permissions.json` |
 | 日志 | `{数据目录}/logs/app.log` |
 
 数据目录：macOS 为 `~/Library/Application Support/AIAgentApp`，
@@ -122,6 +123,25 @@ Windows 为 `%APPDATA%\AIAgentApp`；可用环境变量 `AGENT_DATA_DIR` 覆盖�
 | GET | `/api/chat/history?workspace_id=` | 对话历史 |
 | POST | `/api/chat/send` | 发送消息（Agent 执行，含工具调用） |
 | POST | `/api/chat/clear` | 清空对话 |
+| GET | `/api/permissions/pending?workspace_id=` | 待用户决策的越界授权请求 |
+| POST | `/api/permissions/respond` | 提交授权决策（allow_once / allow_session / allow_always / deny） |
+
+## 越界操作授权机制
+
+默认情况下 Agent 只能读写工作区目录内的文件，并只能执行安全白名单内的终端命令。
+当 Agent 需要访问工作区外路径、执行白名单外命令（或命中 `rm -rf`、`sudo` 等危险
+模式的命令）时，不会再直接拒绝，而是：
+
+1. 工具线程阻塞并向权限管理器登记一条请求；
+2. 前端在对话请求进行期间每 800ms 轮询 `/api/permissions/pending`，发现请求后
+   弹出不可取消的确认框（高风险操作使用红色警示样式）；
+3. 用户选择授权范围：
+   - **允许单次运行**：仅本次放行，不记忆；
+   - **本轮对话允许**：本次对话（当前工作区）内同一目录/同一命令放行，清空对话或重启进程后失效；
+   - **自动允许**：写入 `permissions.json`，重启后仍然生效；
+   - **不允许**：本次调用失败，Agent 会收到拒绝信息并改用其它方案。
+4. 用户 300 秒内未作答视为拒绝，避免工具线程永久挂起。
+
 
 错误统一返回 `{"detail": "中文错误信息"}`；LLM 调用失败返回 502。
 

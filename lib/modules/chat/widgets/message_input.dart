@@ -2,21 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
-/// 多行消息输入框（1~6 行）+ 发送按钮
-/// Enter 发送，Shift+Enter 换行；发送中禁用
+/// 多行消息输入框（1~6 行）+ 发送/停止按钮
+/// Enter 发送，Shift+Enter 换行；思考中按钮变为"停止"并可终止生成
 class MessageInput extends StatefulWidget {
   const MessageInput({
     super.key,
     required this.onSend,
     this.isEnabled = true,
+    this.isThinking = false,
+    this.onStop,
     this.hintText,
   });
 
   /// 发送回调
   final ValueChanged<String> onSend;
 
-  /// 是否可用（loading 时禁用）
+  /// 是否可用（loading 时禁用输入）
   final bool isEnabled;
+
+  /// 模型是否正在思考（按钮切换为停止图标）
+  final bool isThinking;
+
+  /// 停止生成本次回复的回调（思考中点击按钮触发）
+  final VoidCallback? onStop;
 
   /// 占位提示
   final String? hintText;
@@ -105,11 +113,27 @@ class _MessageInputState extends State<MessageInput> {
             ),
           ),
           const SizedBox(width: 8),
-          Obx(() => IconButton.filled(
-                onPressed: _canSend.value ? _send : null,
-                icon: const Icon(Icons.send_rounded),
-                tooltip: '发送',
-              )),
+          // 思考中显示"停止"按钮（终止本次生成），否则显示发送按钮
+          Obx(() {
+            // 无条件读取：Obx 要求回调内至少访问一个响应式变量
+            final canSend = _canSend.value;
+            if (widget.isThinking) {
+              return IconButton.filled(
+                onPressed: widget.onStop,
+                icon: const Icon(Icons.stop_rounded),
+                tooltip: '停止生成',
+                style: IconButton.styleFrom(
+                  backgroundColor: colorScheme.errorContainer,
+                  foregroundColor: colorScheme.onErrorContainer,
+                ),
+              );
+            }
+            return IconButton.filled(
+              onPressed: canSend ? _send : null,
+              icon: const Icon(Icons.send_rounded),
+              tooltip: '发送',
+            );
+          }),
         ],
       ),
     );

@@ -31,12 +31,13 @@ class ConversationRepository extends GetxService {
     });
   }
 
-  /// 发送消息（LLM 可能较慢，超时 300 秒）
+  /// 发送消息（LLM 可能较慢，超时 600 秒；[handle] 可用于中途取消）
   Future<({String response, List<ToolCallModel> toolCalls})> sendMessage({
     required String message,
     required String workspaceId,
     double? temperature,
     int? maxContextLength,
+    RequestHandle? handle,
   }) async {
     final body = <String, dynamic>{
       'message': message,
@@ -49,7 +50,7 @@ class ConversationRepository extends GetxService {
     }
     if (settings.isNotEmpty) body['settings'] = settings;
 
-    final data = await _postChat(body);
+    final data = await _postChat(body, handle);
     final rawToolCalls = data['tool_calls'] as List? ?? [];
     final toolCalls = rawToolCalls
         .whereType<Map<String, dynamic>>()
@@ -61,12 +62,16 @@ class ConversationRepository extends GetxService {
     );
   }
 
-  /// 发送聊天请求（应用 300 秒超时）
-  Future<Map<String, dynamic>> _postChat(Map<String, dynamic> body) async {
+  /// 发送聊天请求（应用长超时）
+  Future<Map<String, dynamic>> _postChat(
+    Map<String, dynamic> body,
+    RequestHandle? handle,
+  ) async {
     final result = await _backend.post(
       ApiConstants.chatSend,
       body: body,
       timeout: ApiConstants.chatTimeout,
+      handle: handle,
     );
     if (result is Map<String, dynamic>) return result;
     throw AppException('响应格式错误');

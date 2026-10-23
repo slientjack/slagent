@@ -3,8 +3,9 @@
 
 设计意图：
 - _safe_path：所有文件工具的路径安全闸门。把 LLM 提供的相对路径解析为
-  工作区内的绝对路径，resolve 后强制校验「必须以工作区根目录为前缀」，
-  从根源上阻止 ../ 路径穿越攻击（即使 LLM 被提示注入诱导也越不出工作区）。
+  工作区内的绝对路径，resolve 后校验「必须以工作区根目录为前缀」。
+  默认情况下越界即拒绝；若构建工具时注入了权限管理器，则改为向用户
+  发起实时授权请求 —— 用户同意后本次操作才放行，拒绝则抛出 PermissionError。
 - truncate_output：统一的输出截断函数。工具输出（文件内容、命令 stdout、
   HTTP body）直接回填进 LLM 上下文，超长输出会撑爆 token 预算甚至超出
   模型上下文窗口，因此统一截断到约 10KB 并附提示，让 LLM 知道内容不完整。
@@ -13,37 +14,70 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # 仅用于类型标注，避免 tools.permission 与本模块产生运行期循环依赖
+    from tools.permission import PermissionManager
 
 # 输出截断上限（约 10KB 字符）。取整为 10240 便于记忆：10 * 1024
 MAX_OUTPUT_CHARS = 10 * 1024
 
 
-def _safe_path(workspace_root: Path | str, rel_path: str) -> Path:
-    """把相对路径安全地解析为工作区内的绝对路径。
+def _safe_path(
+    workspace_root: Path | str,
+    rel_path: str,
+    *,
+    workspace_id: str | None = None,
+    permission_manager: "PermissionManager | None" = None,
+    operation: str = "访问",
+) -> Path:
+    """把 LLM 提供的路径解析为绝对路径，并校验/申请越界访问权限。
 
     解析规则：
-    1. rel_path 若为绝对路径，也按「相对工作区根」理解（取其 basename 不安全，
-       这里直接尝试在工作区下解析，绝对路径会被 resolve 夹到工作区内或报错）；
+    1. rel_path 为绝对路径时，`root / rel_path` 会直接得到该绝对路径
+       （Path 的拼接语义），因此绝对路径同样会走越界校验；
     2. resolve() 会展开符号链接、消除 ../、./ 等冗余片段；
-    3. 校验 resolve 后的路径必须以工作区根（同样 resolve 过）为前缀，
-       否则视为越界，抛出 PermissionError。
+    3. 校验 resolve 后的路径必须位于工作区根目录内：
+       - 在目录内：直接返回；
+       - 越界且未注入权限管理器：抛出 PermissionError（默认安全行为）；
+       - 越界且已注入权限管理器：向用户发起授权请求，同意后返回。
 
     Args:
         workspace_root: 工作区根目录（Path 或 str）。
-        rel_path: LLM 提供的相对路径（如 "src/main.py"、"../etc/passwd"）。
+        rel_path: LLM 提供的路径（如 "src/main.py"、"../etc/passwd"）。
+        workspace_id: 工作区 id（权限请求按工作区隔离会话授权）。
+        permission_manager: 权限管理器；为 None 时越界即拒绝。
+        operation: 操作名称（"读取"/"创建"/"修改"/"删除"/"重命名"/"列出"），
+                   用于生成给用户看的授权说明。
 
     Returns:
-        工作区内的绝对路径（Path 对象）。
+        解析后的绝对路径（Path 对象）。
 
     Raises:
-        PermissionError: 路径越出工作区根目录时抛出（中文错误信息）。
+        PermissionError: 路径越界且用户拒绝授权（或没有授权通道）时抛出。
     """
     root = Path(workspace_root).resolve()
     candidate = (root / rel_path).resolve()
     # 关键安全校验：resolve 后必须仍位于根目录之内（含根目录本身）
-    if candidate != root and root not in candidate.parents:
+    if candidate == root or root in candidate.parents:
+        return candidate
+
+    # ---- 越界：尝试申请用户授权 ----
+    if permission_manager is None or workspace_id is None:
         raise PermissionError(f"路径越界：{rel_path} 不在工作区目录内，已拒绝访问")
+
+    allowed = permission_manager.request(
+        workspace_id=workspace_id,
+        ptype="file_access",
+        target=str(candidate),
+        detail=f"Agent 请求{operation}工作区之外的路径：{candidate}",
+        risk="normal",
+    )
+    if not allowed:
+        raise PermissionError(f"用户拒绝了{operation}工作区之外的路径：{candidate}")
     return candidate
+
 
 
 def truncate_output(text: str, max_chars: int = MAX_OUTPUT_CHARS) -> str:

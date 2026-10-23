@@ -36,6 +36,7 @@ from schemas.chat_schema import (
     MessageRecord,
     ToolCallRecord,
 )
+from tools.permission import PermissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_router(config_manager: ConfigManager, agent_executor: AgentExecutor) -> APIRouter:
+def build_router(
+    config_manager: ConfigManager,
+    agent_executor: AgentExecutor,
+    permission_manager: PermissionManager | None = None,
+) -> APIRouter:
     """构建对话路由。
 
     Args:
         config_manager: 配置管理器（定位数据目录、读取设置与 API Key）。
         agent_executor: Agent 执行器（真正调用 LLM 与工具）。
+        permission_manager: 权限管理器（清空对话时同步清空会话级授权）。
 
     Returns:
         挂载了 chat 三端点的 APIRouter。
@@ -140,6 +146,9 @@ def build_router(config_manager: ConfigManager, agent_executor: AgentExecutor) -
                 logger.info("对话历史已清空：%s", request.workspace_id)
             except OSError as exc:
                 raise HTTPException(status_code=500, detail=f"清空对话历史失败：{exc}")
+        # 清空对话同时作废"本轮对话允许"的授权，避免旧授权残留
+        if permission_manager is not None:
+            permission_manager.clear_session(request.workspace_id)
         return ChatStatusResponse()
 
     @router.post("/send", response_model=ChatSendResponse)
@@ -191,6 +200,7 @@ def build_router(config_manager: ConfigManager, agent_executor: AgentExecutor) -
                 user_message=message,
                 workspace_root=workspace.get("path", ""),
                 settings=effective_settings,
+                workspace_id=request.workspace_id,
             )
         except RuntimeError as exc:
             # AgentExecutor 已翻译成中文错误（如 "Deepseek API 调用失败：..."）

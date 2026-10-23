@@ -14,8 +14,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.agent_executor import AgentExecutor
-from api import chat_routes, settings_routes, workspace_routes
+from api import chat_routes, permission_routes, settings_routes, workspace_routes
 from config import ConfigManager
+from tools.permission import PermissionManager
 
 
 def create_app() -> FastAPI:
@@ -24,15 +25,22 @@ def create_app() -> FastAPI:
     Returns:
         配置好全部路由与中间件的 FastAPI 应用。
     """
-    # ---- 全局单例依赖：配置管理器 与 Agent 执行器 ----
+    # ---- 全局单例依赖：配置管理器 / 权限管理器 / Agent 执行器 ----
     config_manager = ConfigManager()
-    agent_executor = AgentExecutor(config_manager)
+    # 权限管理器：文件越界与白名单外命令的用户授权通道
+    permission_manager = PermissionManager(config_manager.data_dir)
+    # Agent 执行器与权限管理器共享同一实例，工具才能发起授权请求
+    agent_executor = AgentExecutor(config_manager, permission_manager)
 
     app = FastAPI(
         title="本地 AI Agent 后端服务",
         description="为 AI Agent 桌面应用提供工作区管理、对话、设置等 HTTP 接口",
         version="1.0.0",
     )
+    # 把全局依赖挂到 app.state，便于测试与后续扩展（如调试端点）获取
+    app.state.config_manager = config_manager
+    app.state.permission_manager = permission_manager
+    app.state.agent_executor = agent_executor
 
     # CORS：桌面端本体不走浏览器（无 CORS 概念），此处放宽以便前端
     # 以 WebView / Web 调试模式访问；服务只绑定 127.0.0.1，风险可控。
@@ -49,9 +57,10 @@ def create_app() -> FastAPI:
         """健康检查端点：服务存活探测。"""
         return {"status": "ok"}
 
-    # ---- 领域路由：工作区 / 设置 / 对话 ----
-    app.include_router(workspace_routes.build_router(config_manager))
+    # ---- 领域路由：工作区 / 设置 / 对话 / 权限 ----
+    app.include_router(workspace_routes.build_router(config_manager, permission_manager))
     app.include_router(settings_routes.build_router(config_manager))
-    app.include_router(chat_routes.build_router(config_manager, agent_executor))
+    app.include_router(chat_routes.build_router(config_manager, agent_executor, permission_manager))
+    app.include_router(permission_routes.build_router(permission_manager))
 
     return app

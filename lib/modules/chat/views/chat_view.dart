@@ -3,8 +3,10 @@ import 'package:get/get.dart';
 
 import '../../../../data/models/workspace_model.dart';
 import '../controllers/chat_controller.dart';
+import '../controllers/permission_controller.dart';
 import '../widgets/message_input.dart';
 import '../widgets/message_list.dart';
+import '../widgets/permission_card.dart';
 
 /// 聊天视图：消息列表 + 输入区
 class ChatView extends StatelessWidget {
@@ -14,6 +16,10 @@ class ChatView extends StatelessWidget {
   final WorkspaceModel workspace;
 
   final ChatController controller = Get.find<ChatController>();
+
+  /// 权限请求控制器（授权卡片数据源）
+  final PermissionController permissionController =
+      Get.find<PermissionController>();
 
   @override
   Widget build(BuildContext context) {
@@ -64,10 +70,21 @@ class ChatView extends StatelessWidget {
         ),
         // 消息列表
         Expanded(child: MessageList(controller: controller)),
-        // 输入区
+        // 授权卡片：AI 越界操作时内联出现在"思考中…"下方、输入框上方
+        Obx(() {
+          final request = permissionController.currentRequest.value;
+          if (request == null) return const SizedBox.shrink();
+          return PermissionCard(
+            request: request,
+            onDecision: permissionController.submit,
+          );
+        }),
+        // 输入区（思考中按钮切换为停止）
         Obx(() => MessageInput(
               onSend: controller.send,
               isEnabled: !controller.isLoading.value,
+              isThinking: controller.isLoading.value,
+              onStop: controller.stop,
             )),
       ],
     );
