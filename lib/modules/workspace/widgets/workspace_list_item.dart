@@ -30,23 +30,37 @@ class WorkspaceListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
         color: isSelected
-            ? colorScheme.primaryContainer
+            ? colorScheme.primaryContainer.withValues(alpha: 0.6)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           onTap: onTap,
           onSecondaryTapUp: (details) =>
               _showContextMenu(context, details.globalPosition),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             child: Row(
               children: [
+                // 选中指示条（4px 圆角主色竖条）
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 4,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Icon(
                   Icons.folder_outlined,
                   size: 18,
                   color: isSelected
-                      ? colorScheme.onPrimaryContainer
+                      ? colorScheme.primary
                       : colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
@@ -57,7 +71,7 @@ class WorkspaceListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: isSelected
-                              ? colorScheme.onPrimaryContainer
+                              ? colorScheme.onSurface
                               : null,
                           fontWeight:
                               isSelected ? FontWeight.w600 : FontWeight.w400,

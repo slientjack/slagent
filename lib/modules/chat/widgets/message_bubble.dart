@@ -96,10 +96,10 @@ class MessageBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(12),
-            topRight: const Radius.circular(12),
-            bottomLeft: Radius.circular(_isUser ? 12 : 4),
-            bottomRight: Radius.circular(_isUser ? 4 : 12),
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(_isUser ? 16 : 6),
+            bottomRight: Radius.circular(_isUser ? 6 : 16),
           ),
         ),
         child: Column(
@@ -170,22 +170,35 @@ class _ToolCallsView extends StatelessWidget {
         iconColor: _isOnPrimaryBubble(colorScheme),
         collapsedIconColor: _isOnPrimaryBubble(colorScheme),
         children: toolCalls.map((tc) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: colorScheme.surface.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '🔧 ${tc.tool}',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: colorScheme.surface.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.build_circle_outlined,
+                        size: 14,
+                        color: colorScheme.primary,
                       ),
-                ),
+                      const SizedBox(width: 5),
+                      Text(
+                        tc.tool,
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'monospace',
+                                ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 4),
                 Text('参数:',
                     style: Theme.of(context)

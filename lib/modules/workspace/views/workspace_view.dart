@@ -97,9 +97,44 @@ class _Sidebar extends StatelessWidget {
       color: colorScheme.surfaceContainerLow,
       child: Column(
         children: [
+          // 品牌区：应用标识
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.smart_toy_rounded,
+                    size: 18,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'slagent',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                ),
+                const Spacer(),
+                Text(
+                  '本地 AI 助手',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
           // 顶部标题 + 新建按钮
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 12, 8),
             child: Row(
               children: [
                 Expanded(
@@ -107,16 +142,34 @@ class _Sidebar extends StatelessWidget {
                     '工作区',
                     style: Theme.of(context)
                         .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                        .titleSmall
+                        ?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ),
-                IconButton(
-                  tooltip: '新建工作区',
-                  icon: const Icon(Icons.add),
+                FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                    visualDensity: const VisualDensity(
+                      horizontal: VisualDensity.minimumDensity,
+                      vertical: VisualDensity.minimumDensity,
+                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: const Size(0, 32),
+                  ),
                   onPressed: () => showDialog<void>(
                     context: context,
                     builder: (_) => const CreateWorkspaceDialog(),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 16),
+                      SizedBox(width: 4),
+                      Text('新建', style: TextStyle(fontSize: 12)),
+                    ],
                   ),
                 ),
               ],
@@ -154,14 +207,33 @@ class _Sidebar extends StatelessWidget {
               );
             }),
           ),
-          // 底部设置入口
+          // 底部设置入口：行式按钮（图标 + 文字，hover 高亮）
           const Divider(height: 1),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: IconButton(
-              tooltip: '设置',
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => Get.toNamed<void>(AppRoutes.settings),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => Get.toNamed<void>(AppRoutes.settings),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.settings_outlined,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '设置',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

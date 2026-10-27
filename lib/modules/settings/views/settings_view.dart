@@ -105,134 +105,148 @@ class _SettingsFormState extends State<_SettingsForm> {
   Widget build(BuildContext context) {
     final settings = widget.controller.settings.value!;
     final models = settings.availableModels;
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 560),
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
+          shrinkWrap: true,
           children: [
-            // API Key
-            Text('API Key',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(
-              settings.apiKeyConfigured ? '已配置，留空则保持不变' : '尚未配置，请输入模型服务 API Key',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: settings.apiKeyConfigured
-                        ? Theme.of(context).colorScheme.onSurfaceVariant
-                        : Theme.of(context).colorScheme.error,
+            // 分组一：API Key
+            _groupCard(
+              context,
+              icon: Icons.key_rounded,
+              title: 'API Key',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    settings.apiKeyConfigured
+                        ? '已配置，留空则保持不变'
+                        : '尚未配置，请输入模型服务 API Key',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: settings.apiKeyConfigured
+                              ? colorScheme.onSurfaceVariant
+                              : colorScheme.error,
+                        ),
                   ),
+                  const SizedBox(height: 8),
+                  Obx(() => TextField(
+                        controller: _apiKeyController,
+                        obscureText: _obscureApiKey.value,
+                        decoration: InputDecoration(
+                          hintText: 'sk-...',
+                          suffixIcon: IconButton(
+                            tooltip: _obscureApiKey.value ? '显示' : '隐藏',
+                            icon: Icon(
+                              _obscureApiKey.value
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => _obscureApiKey.toggle(),
+                          ),
+                        ),
+                      )),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Obx(() => TextField(
-                  controller: _apiKeyController,
-                  obscureText: _obscureApiKey.value,
-                  decoration: InputDecoration(
-                    hintText: 'sk-...',
-                    suffixIcon: IconButton(
-                      tooltip: _obscureApiKey.value ? '显示' : '隐藏',
-                      icon: Icon(
-                        _obscureApiKey.value
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+            const SizedBox(height: 16),
+
+            // 分组二：模型与生成参数
+            _groupCard(
+              context,
+              icon: Icons.tune_rounded,
+              title: '模型与生成参数',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedModel,
+                    decoration:
+                        const InputDecoration(labelText: '模型'),
+                    items: models
+                        .map((m) => DropdownMenuItem(
+                              value: m.id,
+                              child: Text(m.name),
+                            ))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedModel = v),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('温度（temperature）',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: _temperature.clamp(AppConstants.minTemperature,
+                              AppConstants.maxTemperature),
+                          min: AppConstants.minTemperature,
+                          max: AppConstants.maxTemperature,
+                          divisions: AppConstants.temperatureDivisions,
+                          label: _temperature.toStringAsFixed(1),
+                          onChanged: (v) => setState(() => _temperature = v),
+                        ),
                       ),
-                      onPressed: () => _obscureApiKey.toggle(),
-                    ),
+                      SizedBox(
+                        width: 40,
+                        child: Text(
+                          _temperature.toStringAsFixed(1),
+                          textAlign: TextAlign.end,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
                   ),
-                )),
-            const SizedBox(height: 24),
-
-            // 模型
-            Text('模型',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedModel,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: models
-                  .map((m) => DropdownMenuItem(
-                        value: m.id,
-                        child: Text(m.name),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedModel = v),
-            ),
-            const SizedBox(height: 24),
-
-            // 温度
-            Text('温度（temperature）',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            Row(
-              children: [
-                Expanded(
-                  child: Slider(
-                    value: _temperature.clamp(
-                        AppConstants.minTemperature, AppConstants.maxTemperature),
-                    min: AppConstants.minTemperature,
-                    max: AppConstants.maxTemperature,
-                    divisions: AppConstants.temperatureDivisions,
-                    label: _temperature.toStringAsFixed(1),
-                    onChanged: (v) => setState(() => _temperature = v),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<int>(
+                    initialValue: AppConstants.contextLengthOptions
+                            .contains(_maxContextLength)
+                        ? _maxContextLength
+                        : AppConstants.contextLengthOptions.first,
+                    decoration:
+                        const InputDecoration(labelText: '上下文长度'),
+                    items: AppConstants.contextLengthOptions
+                        .map((len) => DropdownMenuItem(
+                              value: len,
+                              child: Text(len.toString()),
+                            ))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _maxContextLength = v ?? _maxContextLength),
                   ),
-                ),
-                SizedBox(
-                  width: 40,
-                  child: Text(
-                    _temperature.toStringAsFixed(1),
-                    textAlign: TextAlign.end,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // 上下文长度
-            Text('上下文长度',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
-              initialValue: AppConstants.contextLengthOptions
-                      .contains(_maxContextLength)
-                  ? _maxContextLength
-                  : AppConstants.contextLengthOptions.first,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: AppConstants.contextLengthOptions
-                  .map((len) => DropdownMenuItem(
-                        value: len,
-                        child: Text(len.toString()),
-                      ))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => _maxContextLength = v ?? _maxContextLength),
+                ],
+              ),
             ),
 
             // 保存错误提示
             if (_saveError != null) ...[
               const SizedBox(height: 16),
-              Text(
-                _saveError!,
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.error),
+              Row(
+                children: [
+                  Icon(Icons.error_outline,
+                      size: 16, color: colorScheme.error),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _saveError!,
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // 保存按钮
             Obx(() => FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(160, 44),
+                  ),
                   onPressed:
                       widget.controller.isSaving.value ? null : _save,
                   icon: widget.controller.isSaving.value
@@ -247,6 +261,44 @@ class _SettingsFormState extends State<_SettingsForm> {
                 )),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 分组卡片：图标 + 标题 + 内容（Flat 风格：浅容器色 + 圆角，无阴影）
+  Widget _groupCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required Widget child,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
